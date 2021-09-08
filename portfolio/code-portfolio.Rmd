@@ -1,0 +1,229 @@
+---
+title: "yx-portfolio"
+author: "YingXiang UNI:yx2647"
+date: "4/5/2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+#just code
+```{r}
+return=read.csv("return.csv")
+return=return[-1,]
+m=600
+muP=seq(.0001,.006,length=m)
+sdP = rep(0, length(muP))
+mu=colMeans(return[,3:17])
+sigma=cov(return[,3:17])
+weight=matrix(0,nrow=m,ncol=15)
+#2016-04-04 10 Year Treasury Rate is 1.72%
+#daily risk free rate is 1.72%/253
+rf=1.72/100/253
+
+```
+
+```{r}
+#sharpe ratio
+sd=sqrt(diag(sigma))
+sharpe_ratio=(mu-rf)/sd
+sharpe_ratio
+#AAPL has the largest Sharpe ratio, which might let it play a significant role in portfolio.
+```
+
+```{r}
+#portfolio with short sell
+library(quadprog)
+for (i in 1:length(muP)){ # find the optimal portfolios
+  result = solve.QP(Dmat=2*sigma,dvec=rep(0,15),
+  Amat = cbind(rep(1,15),mu),bvec=c(1,muP[i]),meq=2)
+  sdP[i] = sqrt(result$value)
+  weight[i,] = result$solution
+}
+```
+
+```{r}
+GMP=which.min(sdP)
+#MVP-minimum variance portfolio
+sd_MVP=sdP[GMP]
+mu_MVP=muP[GMP]
+weight_MVP=weight[GMP,]
+names(weight_MVP)=names(return)[3:17]
+weight_MVP
+#in the case, we allow short selling and MVP daily average return (0.000287) and standard deviation (0.00971). daily MVP return is higher than the daily risk free rate (0.00006798). 
+
+
+
+plot(sdP[GMP:m],muP[GMP:m],type="l",xlim=c(.005,.06),ylim=c(0,.0060),
+lwd=3,col="red", xlab = "SD of portfolio return",
+ylab = "mean of portfolio return")
+points(sqrt(diag(sigma)), mu, pch = 4)
+text(sqrt(diag(sigma))+0.002, mu, aaa,cex=0.75)
+```
+
+```{r}
+
+
+sharpe=(muP[GMP:m]-rf)/sdP[GMP:m]
+tangency.portfolio.sd=sdP[GMP:m][which.max(sharpe)]
+tangency.portfolio.mu=muP[GMP:m][which.max(sharpe)]
+tangency.portfolio.weight=weight[GMP:m,][which.max(sharpe),]
+names(tangency.portfolio.weight)=names(return)[3:17]
+x=seq(0,tangency.portfolio.sd,length=200)
+y=seq(rf,tangency.portfolio.mu,length=200)
+
+#The Efficient Portfolio Frontier is presented below.
+#the purple line is the sharp slope of tangency portfolio.
+#The red line represents the efficient frontier.
+plot(sdP[GMP:m],muP[GMP:m],type="l",xlim=c(.00,.06),ylim=c(0,.0060),
+lwd=3,col="red", xlab = "SD of portfolio return",
+ylab = "mean of portfolio return")
+
+points(sqrt(diag(sigma)), mu, pch = 4)
+text(sqrt(diag(sigma))+0.002, mu, aaa,cex=0.7)
+text(tangency.portfolio.sd+0.004,tangency.portfolio.mu-0.0004,"tangency portfolio")
+lines(x,y,col="purple")
+points(tangency.portfolio.sd,tangency.portfolio.mu,pch=4,cex=3)
+#weight of tangency portfolio
+tangency.portfolio.weight
+#return of tangency portfolio
+tangency.portfolio.mu
+#sd of tangency portfolio
+tangency.portfolio.sd
+#sharpe ratio oftangency portfolio
+max(sharpe)
+
+RETURN=c(rf,mu_MVP,tangency.portfolio.mu)
+RISK=c(0,sd_MVP,tangency.portfolio.sd)
+rf.mvp.tangency=data.frame(rbind(RETURN,RISK))
+names(rf.mvp.tangency)=c("daily risk free rate","daily MVP","daily tangency portfolio")
+rf.mvp.tangency
+
+
+#by comparing the weight of MVP and weight of tangency portfolio, we find that both portfolio invest heavily in JNJ and PG(Daily Chemicals industry), which has relatively low risk(0.000157 and 0.000163).
+```
+
+```{r}
+#without short sell
+#muP=seq(.0001,.006,length=m)
+muP_noSS = seq(min(mu)+0.00001,max(mu)-0.00001,length=m) # target portfolio return
+sdP_noSS = rep(0, length(muP_noSS))
+weight_noSS=matrix(0,nrow=m,ncol=15)
+for (i in 1:length(muP_noSS)) { # find the optimal portfolios
+result = solve.QP(Dmat=2*sigma,dvec=rep(0,15),Amat=cbind(rep(1,15),mu,diag(1,15)),bvec=c(1,muP_noSS[i],rep(0,15)),meq=2)
+sdP_noSS[i] = sqrt(result$value)
+weight_noSS[i,] = result$solution
+}
+
+plot(sdP[GMP:m],muP[GMP:m],type="l",xlim=c(.005,.02),ylim=c(0,.0020),
+lwd=3,col="red", xlab = "SD of portfolio return",
+ylab = "mean of portfolio return")
+
+points(sqrt(diag(sigma)), mu, pch = 4)
+text(sqrt(diag(sigma))+0.002, mu, names(return)[3:17],cex=0.75)
+GMP=which.min(sdP_noSS)
+lines(sdP_noSS[GMP:m],muP_noSS[GMP:m],type="l",lwd=3,col="blue")
+
+```
+
+```{r}
+plot(sdP_noSS[GMP:m],muP_noSS[GMP:m],type="l",lwd=3,col="blue",xlim=c(.00,.02),ylim=c(0,.0020), xlab = "SD of portfolio return",
+ylab = "mean of portfolio return")
+GMP=which.min(sdP_noSS)
+sharpe=(muP_noSS[GMP:m]-rf)/sdP_noSS[GMP:m]
+tangency.portfolio.sd=sdP_noSS[GMP:m][which.max(sharpe)]
+tangency.portfolio.mu=muP_noSS[GMP:m][which.max(sharpe)]
+tangency.portfolio.weight=weight_noSS[GMP:m,][which.max(sharpe),]
+x=seq(0,tangency.portfolio.sd,length=200)
+y=seq(rf,tangency.portfolio.mu,length=200)
+lines(x,y,col="purple")
+tangency.portfolio.weight=round(tangency.portfolio.weight,6)
+names(tangency.portfolio.weight)=names(return)[3:17]
+tangency.portfolio.weight
+```
+
+```{r}
+sd_MVP=sdP_noSS[GMP]
+mu_MVP=muP_noSS[GMP]
+weight_MVP=weight_noSS[GMP,]
+
+RETURN=c(rf,mu_MVP,tangency.portfolio.mu)
+RISK=c(0,sd_MVP,tangency.portfolio.sd)
+rf.mvp.tangency=data.frame(rbind(RETURN,RISK))
+names(rf.mvp.tangency)=c("daily risk free rate","daily MVP","daily tangency portfolio")
+rf.mvp.tangency
+weight_MVP=round(weight_MVP,6)
+names(weight_MVP)=names(return)[3:17]
+weight_MVP
+```
+
+```{r}
+#with short selling
+muP[42]
+sdP[42]
+weight_0.0005=weight[42,]
+names(weight_0.0005)=names(return)[3:17]
+weight_0.0005
+weight_0.0005*1000000
+```
+
+```{r}
+risk=0.00993968
+mean1=0.05/100
+qnorm(1-0.05)
+#VaR
+1000000*(risk*1.64-mean1)
+#ES
+1000000*(-mean1+risk/0.05*dnorm(qnorm(1-0.05)))
+```
+
+```{r}
+tangency.portfolio.mu
+tangency.portfolio.sd
+k=(rf-tangency.portfolio.mu)/(-tangency.portfolio.sd)
+sd.withrf=(0.0005-tangency.portfolio.mu+k*tangency.portfolio.sd)/k
+sd.withrf
+
+weight_risky=sd.withrf/tangency.portfolio.sd
+weight_risky
+
+
+```
+```{r}
+risk=0.004171207
+mean1=0.05/100
+qnorm(1-0.05)
+#VaR
+1000000*(risk*1.64-mean1)
+#ES
+1000000*(-mean1+risk/0.05*dnorm(qnorm(1-0.05)))
+```
+
+```{r}
+muP_noSS[177]
+sdP_noSS[177]
+weight_0.0005=round(weight_noSS[177,],8)
+names(weight_0.0005)=names(return)[3:17]
+weight_0.0005
+weight_0.0005*1000000
+```
+```{r}
+risk=0.01013556
+mean1=0.05/100
+qnorm(1-0.05)
+#VaR
+1000000*(risk*1.64-mean1)
+#ES
+1000000*(-mean1+risk/0.05*dnorm(qnorm(1-0.05)))
+```
+
+```{r}
+risk=0.00583294
+mean1=0.05/100
+qnorm(1-0.05)
+#VaR
+1000000*(risk*1.64-mean1)
+#ES
+1000000*(-mean1+risk/0.05*dnorm(qnorm(1-0.05)))
+```
